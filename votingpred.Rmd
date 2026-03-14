@@ -1,0 +1,273 @@
+---
+title: "Predicting the Porportion of Votes of the Most Popular Canadian Party for the Federal Election"
+author: "Tayla Stanley-Timla"
+output:
+  pdf_document: default
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+library(openintro)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(survey)
+library(broom)
+library(tinytex)
+```
+
+
+
+```{r, include = FALSE}
+
+# Here you can load in the census data 
+
+census_data <- read_csv("gss_clean.csv")
+
+# Here you can load in the survey data
+
+survey_data <- read_csv("ces2019-phone_clean.csv")
+
+```
+
+
+## Introduction
+
+
+Currently Canadian citizens over the age of 18 have the right to vote in federal elections, although voting has not always been a privilege for all Canadians. Being able to vote in the federal election is extremely important to Canadian citizens as it will greatly impact the next four years of their lives. Additionally, the outcome of the election is of great interest to many Canadians. The objective of this report is to predict the overall popular vote of the next Canadian federal election with the use of a logistic regression model and a post-stratification technique. The target population of this study is the Canadian citizens that will vote in the 2023 election. Furthermore, the survey data used in the study was obtained from the 2019 Canadian Election Study dataset that is available through their website. Moreover, General Social Survey data from 2017 will be used as census data to model some population demographics. The post-stratification technique will be used to estimate the most popular Canadian party by partitioning the population into demographic cells, calculating a value for each cell and then combining the values with a weighted average. 
+
+## Data
+
+The Canadian Election Study surveys the demographics and preferences that are expected to be significant to the political beliefs of Canadian voters. It is publicly available through the Canadian Election Study website. The Canadian Election study distributed surveys via phone call and through the web. The phone survey data was used in this study. In addition, the survey was organized to obtain the attitudes and feelings of Canadian citizens before and after the 2019 federal election. There were two phases of data collection. During the election period, interviewers successfully surveyed 4,021 Canadian citizens. After the election, the respondents were called or emailed to complete a post election survey. The post election survey will not be analysed in this study. To select telephone numbers to be surveyed, a modified random digit dialling procedure was implemented. Moreover, for households with multiple Canadian citizens over 18 a birthday selection method was implemented to choose the respondent. Further, Computer Assisted Telephone Interviewing was used for all of the telephone data collection.
+
+The General Social Survey has two main objectives which are to collect data on public trends to observe the fluctuations of Canadian’s well-being over time, and to supply information for social and political affairs. The General Social Survey targets all non-institutionalized Canadians over the age of 14, that live in a province. In addition, the survey design incorporates both cell phone users and landline owners to access a greater span of all of the potential households. A stratified probability sampling procedure by province was employed to obtain the sample. They determined the minimum sample size for each province to satisfy a level of variability by the level of stratum. Moreover, about 34,000 people were reached out to be included in the survey across Canada and around 20,000 respondents completed a questionnaire.
+
+To clean the survey data, starting with question 11 which was “which party do you think you will likely vote for?”,  the observations in which respondents did not answer a political party from the options 1 to 6 were removed as they won’t be useful for the purpose of this study. Next, the survey data was filtered to only include respondents who indicated their gender as male or female as only male and female were represented in the census data and because gender will be used as a predictor variable in the regression model. Then, the observations from the survey in which the respondents were from either of the territories; Northwest Territories or Yukon were removed as they were not represented in the census data. Additionally, the gender category was coded using the strings “Male”/”Female” to match the census data. A new variable called age was created by subtracting birth year by 2019 which is the year the survey was taken. As well as, a categorical variable of whether or not an individual supports the conservative party and a number variable for the proportion of support for the conservative party in the data. Furthermore, to clean the census data ages were rounded to whole numbers, observations by participants under 18 were removed from the data and sex was renamed as gender. Then provincial names were coded as numbers to match the survey data and all of the columns but gender, age and province were removed from the census data.
+
+
+```{r, include = FALSE}
+
+# remove the columns that are not a party 
+# and change the numbers to the party names 
+
+survey_data = survey_data %>% filter(q11 == 1 |q11 == 2|q11 == 3 |q11 == 4 |q11 == 5 |q11 == 6)
+
+survey_data = survey_data %>% filter(q3 == 1| q3 ==2)
+
+survey_data = survey_data %>% filter(!q4 == 11 & !q4 == 12 ) 
+
+  
+survey_data = survey_data %>%
+  mutate(gender = ifelse(q3 ==1, "Male", "Female"), age = 2019-q2, support_conservative = ifelse(q11 ==2, 1, 0), conservative_proportion = sum(support_conservative) / nrow(survey_data)) %>%
+  select(gender, age, support_conservative, conservative_proportion, province = q4)
+
+# census data 
+
+census_data <- census_data %>% 
+  mutate(age=round(age)) %>% 
+  filter(age >= 18)%>%
+  select(age, gender = sex, province)
+
+for (i in 1:20253){if(census_data$province[i]== "Newfoundland and Labrador"){census_data$province[i] = 1}
+  
+  if(census_data$province[i]== "Prince Edward Island"){census_data$province[i] = 2}
+  if(census_data$province[i]== "Nova Scotia"){census_data$province[i] = 3}
+  if(census_data$province[i]== "New Brunswick"){census_data$province[i] = 4}
+  if(census_data$province[i]== "Quebec"){census_data$province[i] = 5}
+  if(census_data$province[i]== "Ontario"){census_data$province[i] = 6}
+  if(census_data$province[i]== "Manitoba"){census_data$province[i] = 7}
+  if(census_data$province[i]== "Saskatchewan"){census_data$province[i] = 8}
+  if(census_data$province[i]== "Alberta"){census_data$province[i] = 9}
+  if(census_data$province[i]== "British Columbia"){census_data$province[i] = 10}
+  }
+
+
+```
+
+
+The variables that are included in the study are age, gender, province, support_cons, cons_proportion. The ages range from 18 to 100 as 18 is the minimum age to vote in Canada. The gender variable can only take on “Male” or “Female” due to the constraints in the census data. The province variable takes on values 1 to 10 that represent Newfoundland and Labrador, Prince Edward Island, Nova Scotia, New Brunswick, Quebec, Ontario, Manitoba, Saskatchewan, Alberta and British Columbia respectively. The variable support_cons is an indicator variable that takes on a value of 1 or 0, 1 is taken if the individual supports the conservative party and 0 if they do not. Further, the cons_proportion variable gives the proportion of conservative voters in the data or the sum of conservative voters over the entire population. 
+
+
+```{r, include=TRUE}
+
+# census frequncies
+
+census_data %>% 
+  group_by(province) %>%
+  summarise(number_people = n())
+
+# survey province
+
+survey_data %>% group_by(province) %>% summarise(number_people = n(), number_conservative = sum(support_conservative), proportion_conservative_data = number_conservative/2727, proportion_conservative_province = number_conservative/n())
+
+# survey gender 
+
+survey_data %>% group_by(gender) %>% summarise(number_people = n(), number_conservative = sum(support_conservative), proportion_conservative_data = sum(support_conservative)/nrow(survey_data), propotion_conservative_gender = sum(support_conservative)/n())
+
+# survey age 
+
+survey_data %>% 
+mutate(age_group = ifelse(age <35, "18-34", ifelse(age<51, "35-50", ifelse(age<69, "51-68", ifelse(age<85, "69-84", "85-100"))))) %>%
+       group_by(age_group) %>% summarise(number_people = n(), number_conservative = sum(support_conservative), proportion_conservative_data = sum(support_conservative)/nrow(survey_data), prop_by_age = sum(support_conservative)/n())
+
+
+```
+
+The first summary looks at the frequency of individuals in the census data by province to get an idea of the weights in the stratification process. The second summary looks at how conservative beliefs vary in the survey data by province. The summary includes the number of individuals by province, the number of conservatives for each province, the proportion of conservatives out of the survey data and the proportion of conservatives by province. Then the gender variable was analyzed by looking at the number males and females in the survey data, the number that are conservative, the proportion conservative out of all of the data and the proportion conservative by each gender. Further the same summaries were analyzed once more with age in which close ages were grouped together to get a more obvious idea of how conservative views change with respect to age groups. These summaries were used to get a general sense of the relationship between conservative political beliefs with age, gender and province. 
+
+
+
+
+```{r, echo = TRUE}
+
+# gender sample
+
+df = data.frame(gen = c("Female", "Male","Female", "Male","Female", "Male"), frequency_gen = c(324, 656, 400, 500, 408, 483), conservative = c("Yes", "Yes", "No", "No", "No", "No"))
+
+ggplot(data = df, aes(x = gen, y = frequency_gen)) + geom_col(aes(fill= conservative), width = 0.7) + xlab("Gender")+ ylab("Frequency") + ggtitle(label = "The Frequency of Males and Females in the Sample", subtitle = "Amount conservative vs non-conservative")
+
+
+# age group sample
+
+df2 <- data.frame(
+  age_group = c("18-34", "35-50", "51-68", "69-84","85-100"),
+  num_cons = c(160, 277, 363,165, 15))
+
+ggplot(df2, aes(x="", y=num_cons, fill=age_group)) +
+  geom_bar(stat="identity", width=1, color="white") +
+  coord_polar("y", start=0) +  theme_void() + ggtitle(label = "The Proportion Conservative in the Sample by Age")
+
+
+# province sample
+
+df4 = data.frame( province = c("NL", "BC", "PE", "NS", "NB", "QC", "ON", "MB", "SK", "AB"), num_conservative = c(33, 180, 40,41, 49, 86, 184, 97, 116, 154 ))
+
+ggplot(df4, aes(x="", y=num_conservative, fill=province)) +
+  geom_bar(stat="identity", width=1, color="white") +
+  coord_polar("y", start=0) +  theme_void() + ggtitle(label = "The Proportion Conservative in the Sample by Province")
+
+
+# distribution of people in each province population
+
+df3 = data.frame(prov = c("NL", "BC", "PE", "NS", "NB", "QC", "ON", "MB", "SK", "AB"), count1 = c(1076, 2485, 694, 1408, 1315, 3755, 5513, 1173,1129,1705) )
+
+  ggplot(df3, (aes(x = prov, y = count1))) + geom_col(color = "orange") + xlab("Province")+ ylab("Frequency") + ggtitle(label = "Amount of People in Population by Province")
+
+  
+
+```
+
+The first plot depicts the relationship between gender and conservative political beliefs. The bar graph shows the frequency of males and females the survey data set. The amount of women that are conservative are depicted by the blue box which is 324. Moreover, the amount of conservative males are shown by the blue box which is 656. 
+
+The second plot is a pie graph which demonstrates visually the proportion of people who voted conservative by the total number of conservative votes by age group. The age group 85-100 has the smallest number of conservative and this is likely because this age group made up the smallest proportion of people in the survey (see summary 4 there are only 35 people in this age group). While, the 51-68 age group clearly has the largest amount of conservative voters.
+
+The third plot is another pie graph that showcases the conservative support by province. Provinces with more people have a larger weight in the pie because the proportion used to create the graph is out of the total votes in the data as opposed to the total votes by province. The pie shows that Ontario and British Columbia have the greater contribution to the total amount of conservative votes. Whereas, Prince Edward Island and Newfoundland contribute the least to the total conservative votes. 
+
+The final plot depicts the frequencies of people in the census data by province to get an idea of how much weight each province will have on the estimate of the proportion of conservative votes. Ontario and Quebec will have the greatest influence on the proportion of conservative votes as they are significantly larger than the other provinces. Prince Edward Island will have the least effect on estimate of the proportion of conservative votes as it will have the smallest weight. 
+
+
+## Methods
+
+### Model Specifics
+
+To determine the percentage of conservative voters in the population data we want to predict whether or not someone will vote conservative or not based off of some demographics that are in the census data. To predict whether or not someone votes conservative requires a binary variable such as support_conservative that was defined earlier and this was used as the response variable. A Logistic regression model is a statistical model that can model a binary response variable using a log function. Therefore, a logistic regression model was utilized to model whether or not an individual supports the conservative party. For the predictor variables age and gender were used as there seemed to be trends with theses variables and political beliefs. Age was kept as a numerical predictor variable as it takes on a range of values from 18 to 100. While gender was a categorical predictor and it was coded using as.factor so that it could be treated correctly. Moreover, for the logistic regression model a finite population correction was implemented since the survey population is smaller than the target population. The finite population correction fixes the standard error estimates so they reflect the target population better. The logistic model was created using the svyglm function with the binomial family to ensure the response is binary. The outcome of the logistic regression model gives the log likelihood of an individual to vote conservative based off their age and gender. This likelihood can be rearranged as the probability of that individual to vote conservative. 
+
+
+y = -1.4739 + 0.0107x(age) + 0.5272I(male) + e
+
+
+```{r, include=FALSE}
+
+# logistic regression model 
+
+n=2727
+N=20602
+
+#  using a survey design
+fpc.srs = rep(N, n)
+
+con.design <- svydesign(id=~1, data=survey_data, fpc=fpc.srs)
+
+consvyglm <- svyglm(support_conservative ~ age + as.factor(gender), 
+                   con.design, family="binomial")
+summary(consvyglm)
+
+
+
+# try estimating the number of conservative by province of sample data
+
+survey_data$estimate <-
+  consvyglm %>%
+  predict(newdata = survey_data)
+
+survey_data = survey_data%>% group_by(province) %>%
+  mutate(cell_total = n(), p = exp(estimate)/(exp(estimate)+1))
+
+survey_data%>%
+  mutate(conservative_predict_proportion = p*cell_total) %>%
+  group_by(province) %>%
+  summarise(conservative_predict = mean(conservative_predict_proportion))
+
+
+
+```
+
+
+## Post-Stratification 
+
+The poststratification process essentially creates a weighted average based off of some demographic and the proportions of the demographic in the population. The first step in the poststratification process is to partition the data based off of the demographic of interest. Then an estimate is obtained for each group of the demographic. Next, the value for each group is multiplied by its proportion in the population to get a weighted expected value for the entire population. The poststratification is particularly useful for estimating some parameter of a population when you don't have access to the entire population but you know the relative proportions along a demographic. It enables you to ensure that each group in the demographic is properly represented in the sample that way, the sample resembles the population and you can make better predictions of the parameter. 
+
+
+Estimates for the likelihood of voting conservative were created for each observation in the census data based on age and gender using the logistic model. Then the probability was derived from the log likelihood using simple exponential functions on the estimate. Next, the census data were group by province to stratify the data by province. Once the data was grouped the cell total was calculated which is the total individuals in each province. Further, each probability was multiplied by its province cell total in order to weigh the conservative probability by province. Then the data was grouped by province and the mean of the weighted proportions were taken for each province. This yeilded weighted estimates for the count of conservative voters for each province. Then to find the proportion of conservative votes for the census data which was 0.347, the weighted estimates were summed and then divided by the population. The assumptions are that the census data is representative of people who will vote in the 2023 federal election. Also, that in the logistic regression model age and gender are good predictors for whether someone votes conservative or not. The parameter of interest is the proportion of conservative votes in the 2023 election and the estimate obtained from this study is 0.347. This value also represents the weighted probability of conservative votes based by province. 
+
+
+
+All analysis for this report was programmed using `R version 4.0.2`. 
+
+
+
+## Results 
+
+```{r, include=FALSE}
+
+
+census_data$estimate <-
+  consvyglm %>%
+  predict(newdata = census_data)
+
+census_data = census_data %>% mutate(p = exp(estimate)/(exp(estimate)+1))
+
+census_data = census_data%>% group_by(province) %>%
+  mutate(cell_total = n())
+
+census_data = census_data%>%
+  mutate(conservative_predict_proportion = p*cell_total) %>%
+  group_by(province) %>%
+  mutate(conservative_predict = mean(conservative_predict_proportion))
+
+```
+
+```{r, include=TRUE}
+
+census_data %>%
+  group_by(province) %>%
+  summarise(conservative_predict= sum(conservative_predict, na.rm = TRUE))
+
+weighted_estimates = c(372, 870, 239,495, 460,1303,1909,411,394,581)
+y_hat_population = sum(weighted_estimates)/20253
+y_hat_population
+
+
+```
+
+
+
+
+## Bibliography
+
+1. Stephenson, Laura B; Harell, Allison; Rubenson, Daniel; Loewen, Peter John. (2020) *2019 Canadian Election Study - Phone Survey Technical Report.pdf*, 2019 Canadian Election Study - Phone Survey, [https://doi.org/10.7910/DVN/8RHLG1/1PBGR3](https://doi.org/10.7910/DVN/8RHLG1/1PBGR3), Harvard Dataverse, V1
+
+2. Government of Canada, S. C. (2019, February 6). *General Social Survey - Family (GSS). Surveys and statistical programs.* [https://www23.statcan.gc.ca/imdb/p2SV.pl?Function=getSurvey&SDDS=450](https://www23.statcan.gc.ca/imdb/p2SV.pl?Function=getSurvey&SDDS=4501). 
+
+3. Holtz, Y. (n.d.). *ggplot2 Piechart. – the R Graph Gallery*.[https://www.r-graph-gallery.com/piechart-ggplot2.html](https://www.r-graph-gallery.com/piechart-ggplot2.html). 
