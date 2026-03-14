@@ -51,17 +51,11 @@ Exploratory summaries were used to understand how conservative political support
 
 Key relationships explored:
 
-Gender
+Gender: Male respondents showed a higher proportion of conservative support compared to female respondents.
 
-Male respondents showed a higher proportion of conservative support compared to female respondents.
+Age: Conservative support tended to increase with age, with older age groups showing the highest proportions.
 
-Age
-
-Conservative support tended to increase with age, with older age groups showing the highest proportions.
-
-Province
-
-Provincial differences in political support were observed, with larger provinces such as Ontario and British Columbia contributing the greatest share of conservative voters due to population size.
+Province: Provincial differences in political support were observed, with larger provinces such as Ontario and British Columbia contributing the greatest share of conservative voters due to population size.
 
 ## Methods
 
